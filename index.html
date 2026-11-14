@@ -8,7 +8,9 @@
 <title>Shock Logger</title>
 
 <style>
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -30,9 +32,15 @@ body {
   margin-bottom: 20px;
 }
 
-h1 { font-size: 23px; margin: 0; }
+h1 {
+  font-size: 23px;
+  margin: 0;
+}
 
-.muted { color: #94a3b8; font-size: 12px; }
+.muted {
+  color: #94a3b8;
+  font-size: 12px;
+}
 
 .status {
   color: #fbbf24;
@@ -62,7 +70,9 @@ h1 { font-size: 23px; margin: 0; }
   margin-top: 8px;
 }
 
-.unit { font-size: 19px; }
+.unit {
+  font-size: 19px;
+}
 
 .grid {
   display: grid;
@@ -86,10 +96,16 @@ button {
   background: #4adeb4;
   color: #102b27;
   margin: 6px 0;
+  cursor: pointer;
 }
 
 button.secondary {
   background: #334155;
+  color: white;
+}
+
+button.danger {
+  background: #7f293b;
   color: white;
 }
 
@@ -110,6 +126,7 @@ canvas {
 </head>
 
 <body>
+
 <div class="container">
 
   <div class="header">
@@ -117,17 +134,28 @@ canvas {
       <h1>⚡ SHOCK LOGGER</h1>
       <div class="muted">ESP32-C3 · MPU6050</div>
     </div>
-    <div class="status" id="status">● DISCONNECTED</div>
+
+    <div class="status" id="status">
+      ● DISCONNECTED
+    </div>
   </div>
+
+  <!-- Highest shock -->
 
   <div class="card">
     <div class="label">HIGHEST SHOCK RECORDED</div>
+
     <div class="big">
       <span id="peak">0.00</span>
       <span class="unit">G</span>
     </div>
-    <div class="muted">Highest dynamic acceleration received</div>
+
+    <div class="muted">
+      Maximum dynamic acceleration since reset
+    </div>
   </div>
+
+  <!-- Live values -->
 
   <div class="grid">
 
@@ -153,9 +181,16 @@ canvas {
 
   </div>
 
+  <!-- XYZ graph -->
+
   <div class="card">
-    <div class="label">LIVE X / Y / Z ACCELERATION</div>
+
+    <div class="label">
+      LIVE X / Y / Z ACCELERATION
+    </div>
+
     <canvas id="accelChart"></canvas>
+
     <div class="muted">
       <span style="color:#4adeb4">● X</span>
       &nbsp;
@@ -163,13 +198,26 @@ canvas {
       &nbsp;
       <span style="color:#fbbf24">● Z</span>
     </div>
+
   </div>
 
+  <!-- Shock graph -->
+
   <div class="card">
-    <div class="label">LIVE SHOCK GRAPH</div>
+
+    <div class="label">
+      LIVE SHOCK GRAPH
+    </div>
+
     <canvas id="shockChart"></canvas>
-    <div class="muted">Shock acceleration (G)</div>
+
+    <div class="muted">
+      Dynamic acceleration (G)
+    </div>
+
   </div>
+
+  <!-- Bluetooth buttons -->
 
   <button id="connectBtn" onclick="connectBLE()">
     CONNECT ESP32-C3
@@ -179,31 +227,33 @@ canvas {
     DISCONNECT
   </button>
 
-  <button class="secondary" onclick="resetPeak()">
+  <button class="danger" onclick="resetPeak()">
     RESET HIGHEST SHOCK
   </button>
 
   <div class="footer">
-    Shock Logger · Local BLE monitoring · No cloud
+    SHOCK LOGGER · BLE MONITORING
   </div>
 
 </div>
 
 <script>
 
-// BLE identifiers must match ESP32 code
+// BLE UUIDs - MUST MATCH ESP32 CODE
+
 const SERVICE_UUID =
-  "12345678-1234-1234-1234-123456789000";
+"12345678-1234-1234-1234-123456789000";
 
 const CHARACTERISTIC_UUID =
-  "12345678-1234-1234-1234-123456789001";
+"12345678-1234-1234-1234-123456789001";
 
 let device = null;
 let characteristic = null;
 
+// Highest shock is calculated on the iPhone
 let highestShock = 0;
-let highestTotal = 0;
 
+// Graph history
 const historyLength = 100;
 
 let xData = [];
@@ -211,37 +261,45 @@ let yData = [];
 let zData = [];
 let shockData = [];
 
+
+// STATUS DISPLAY
+
 function setStatus(message, color) {
-  const status = document.getElementById("status");
+
+  const status =
+    document.getElementById("status");
+
   status.textContent = "● " + message;
   status.style.color = color;
+
 }
 
-function addPoint(array, value) {
-  array.push(value);
-  if (array.length > historyLength) {
-    array.shift();
-  }
-}
+
+// BLUETOOTH CONNECTION
 
 async function connectBLE() {
 
   try {
 
     if (!navigator.bluetooth) {
+
       alert(
-        "Web Bluetooth is unavailable. Open this page in Bluefy on your iPhone."
+        "Bluetooth unavailable. Open this website in Bluefy."
       );
+
       return;
     }
 
     setStatus("SEARCHING...", "#fbbf24");
 
     device = await navigator.bluetooth.requestDevice({
+
       filters: [
         { name: "Shock_Logger" }
       ],
+
       optionalServices: [SERVICE_UUID]
+
     });
 
     device.addEventListener(
@@ -251,13 +309,16 @@ async function connectBLE() {
 
     setStatus("CONNECTING...", "#fbbf24");
 
-    const server = await device.gatt.connect();
+    const server =
+      await device.gatt.connect();
 
     const service =
       await server.getPrimaryService(SERVICE_UUID);
 
     characteristic =
-      await service.getCharacteristic(CHARACTERISTIC_UUID);
+      await service.getCharacteristic(
+        CHARACTERISTIC_UUID
+      );
 
     await characteristic.startNotifications();
 
@@ -271,30 +332,52 @@ async function connectBLE() {
     document.getElementById("connectBtn").textContent =
       "CONNECTED TO " + device.name;
 
-  } catch (error) {
+  }
+
+  catch (error) {
 
     console.error(error);
 
     setStatus("CONNECTION ERROR", "#fb7185");
 
-    alert("Bluetooth error: " + error.message);
+    alert(
+      "Bluetooth error: " + error.message
+    );
+
   }
+
 }
+
+
+// RECEIVE ESP32 DATA
 
 function handleData(event) {
 
   const value = event.target.value;
 
-  const text = new TextDecoder().decode(value);
+  const text =
+    new TextDecoder().decode(value);
 
-  const readings = text.trim().split(",").map(Number);
+  const readings =
+    text.trim().split(",").map(Number);
 
-  if (readings.length < 6 ||
-      !readings.slice(0, 6).every(Number.isFinite)) {
+  if (
+    readings.length < 6 ||
+    !readings.slice(0, 6).every(Number.isFinite)
+  ) {
     return;
   }
 
-  const [x, y, z, total, shock, devicePeak] = readings;
+  const [
+    x,
+    y,
+    z,
+    total,
+    shock,
+    devicePeak
+  ] = readings;
+
+  // Update live readings
 
   document.getElementById("x").textContent =
     x.toFixed(2) + " G";
@@ -308,16 +391,22 @@ function handleData(event) {
   document.getElementById("total").textContent =
     total.toFixed(2) + " G";
 
+
+  // IMPORTANT:
+  // Use only incoming shock values.
+  // Do not use devicePeak here.
+  // This allows the phone's reset button to work.
+
   highestShock = Math.max(
     highestShock,
-    shock,
-    devicePeak
+    shock
   );
-
-  highestTotal = Math.max(highestTotal, total);
 
   document.getElementById("peak").textContent =
     highestShock.toFixed(2);
+
+
+  // Update graph data
 
   addPoint(xData, x);
   addPoint(yData, y);
@@ -325,7 +414,24 @@ function handleData(event) {
   addPoint(shockData, shock);
 
   drawCharts();
+
 }
+
+
+// ADD GRAPH POINT
+
+function addPoint(array, value) {
+
+  array.push(value);
+
+  if (array.length > historyLength) {
+    array.shift();
+  }
+
+}
+
+
+// DISCONNECT
 
 function onDisconnected() {
 
@@ -335,16 +441,22 @@ function onDisconnected() {
     "CONNECT ESP32-C3";
 
   characteristic = null;
+
 }
+
 
 function disconnectBLE() {
 
   if (device && device.gatt.connected) {
     device.gatt.disconnect();
+  } else {
+    onDisconnected();
   }
 
-  onDisconnected();
 }
+
+
+// RESET HIGHEST SHOCK
 
 function resetPeak() {
 
@@ -352,55 +464,78 @@ function resetPeak() {
 
   document.getElementById("peak").textContent =
     "0.00";
+
 }
 
-// Draw live charts
-function drawChart(canvasId, datasets, colors, maxAbs) {
 
-  const canvas = document.getElementById(canvasId);
+// DRAW GRAPH
 
-  const rect = canvas.getBoundingClientRect();
+function drawChart(
+  canvasId,
+  datasets,
+  colors,
+  maxAbs
+) {
 
-  const dpr = window.devicePixelRatio || 1;
+  const canvas =
+    document.getElementById(canvasId);
+
+  const rect =
+    canvas.getBoundingClientRect();
+
+  if (!rect.width) return;
+
+  const dpr =
+    window.devicePixelRatio || 1;
 
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
 
-  const ctx = canvas.getContext("2d");
+  const ctx =
+    canvas.getContext("2d");
 
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const width = rect.width;
   const height = rect.height;
 
   ctx.clearRect(0, 0, width, height);
 
-  // Grid
+  // Grid lines
+
   ctx.strokeStyle = "#334155";
   ctx.lineWidth = 1;
 
   for (let i = 1; i <= 4; i++) {
-    let y = height * i / 5;
+
+    const y = height * i / 5;
 
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
     ctx.stroke();
+
   }
+
+
+  // Draw datasets
 
   datasets.forEach((data, index) => {
 
     if (data.length < 2) return;
 
     ctx.beginPath();
+
     ctx.strokeStyle = colors[index];
     ctx.lineWidth = 2;
 
     data.forEach((value, i) => {
 
-      const x = i * width / (historyLength - 1);
+      const x =
+        i * width / (historyLength - 1);
 
-      const y = height / 2 -
+      const y =
+        height / 2 -
         (value / maxAbs) * (height / 2 - 8);
 
       if (i === 0) {
@@ -408,12 +543,17 @@ function drawChart(canvasId, datasets, colors, maxAbs) {
       } else {
         ctx.lineTo(x, y);
       }
+
     });
 
     ctx.stroke();
 
   });
+
 }
+
+
+// UPDATE GRAPHS
 
 function drawCharts() {
 
@@ -435,13 +575,23 @@ function drawCharts() {
     ["#fb7185"],
     shockMax
   );
+
 }
 
-window.addEventListener("resize", drawCharts);
+
+// HANDLE SCREEN RESIZE
+
+window.addEventListener(
+  "resize",
+  drawCharts
+);
+
+
+// INITIALIZE
 
 drawCharts();
 
 </script>
+
 </body>
 </html>
-
