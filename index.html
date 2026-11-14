@@ -1,1 +1,447 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Shock Logger</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 18px;
+  background: #101827;
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.container {
+  max-width: 600px;
+  margin: auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+h1 { font-size: 23px; margin: 0; }
+
+.muted { color: #94a3b8; font-size: 12px; }
+
+.status {
+  color: #fbbf24;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.card {
+  background: #1c293b;
+  border: 1px solid #2c3c52;
+  border-radius: 16px;
+  padding: 17px;
+  margin-bottom: 14px;
+}
+
+.label {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.big {
+  font-size: 43px;
+  font-weight: 750;
+  color: #4adeb4;
+  margin-top: 8px;
+}
+
+.unit { font-size: 19px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.value {
+  font-size: 25px;
+  font-weight: bold;
+  margin-top: 9px;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 15px;
+  width: 100%;
+  font-size: 15px;
+  font-weight: bold;
+  background: #4adeb4;
+  color: #102b27;
+  margin: 6px 0;
+}
+
+button.secondary {
+  background: #334155;
+  color: white;
+}
+
+canvas {
+  width: 100%;
+  height: 190px;
+  display: block;
+  margin-top: 12px;
+}
+
+.footer {
+  text-align: center;
+  color: #64748b;
+  font-size: 11px;
+  padding: 16px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>⚡ SHOCK LOGGER</h1>
+      <div class="muted">ESP32-C3 · MPU6050</div>
+    </div>
+    <div class="status" id="status">● DISCONNECTED</div>
+  </div>
+
+  <div class="card">
+    <div class="label">HIGHEST SHOCK RECORDED</div>
+    <div class="big">
+      <span id="peak">0.00</span>
+      <span class="unit">G</span>
+    </div>
+    <div class="muted">Highest dynamic acceleration received</div>
+  </div>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="label">X ACCELERATION</div>
+      <div class="value" id="x">0.00 G</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Y ACCELERATION</div>
+      <div class="value" id="y">0.00 G</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Z ACCELERATION</div>
+      <div class="value" id="z">0.00 G</div>
+    </div>
+
+    <div class="card">
+      <div class="label">TOTAL ACCELERATION</div>
+      <div class="value" id="total">0.00 G</div>
+    </div>
+
+  </div>
+
+  <div class="card">
+    <div class="label">LIVE X / Y / Z ACCELERATION</div>
+    <canvas id="accelChart"></canvas>
+    <div class="muted">
+      <span style="color:#4adeb4">● X</span>
+      &nbsp;
+      <span style="color:#60a5fa">● Y</span>
+      &nbsp;
+      <span style="color:#fbbf24">● Z</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">LIVE SHOCK GRAPH</div>
+    <canvas id="shockChart"></canvas>
+    <div class="muted">Shock acceleration (G)</div>
+  </div>
+
+  <button id="connectBtn" onclick="connectBLE()">
+    CONNECT ESP32-C3
+  </button>
+
+  <button class="secondary" onclick="disconnectBLE()">
+    DISCONNECT
+  </button>
+
+  <button class="secondary" onclick="resetPeak()">
+    RESET HIGHEST SHOCK
+  </button>
+
+  <div class="footer">
+    Shock Logger · Local BLE monitoring · No cloud
+  </div>
+
+</div>
+
+<script>
+
+// BLE identifiers must match ESP32 code
+const SERVICE_UUID =
+  "12345678-1234-1234-1234-123456789000";
+
+const CHARACTERISTIC_UUID =
+  "12345678-1234-1234-1234-123456789001";
+
+let device = null;
+let characteristic = null;
+
+let highestShock = 0;
+let highestTotal = 0;
+
+const historyLength = 100;
+
+let xData = [];
+let yData = [];
+let zData = [];
+let shockData = [];
+
+function setStatus(message, color) {
+  const status = document.getElementById("status");
+  status.textContent = "● " + message;
+  status.style.color = color;
+}
+
+function addPoint(array, value) {
+  array.push(value);
+  if (array.length > historyLength) {
+    array.shift();
+  }
+}
+
+async function connectBLE() {
+
+  try {
+
+    if (!navigator.bluetooth) {
+      alert(
+        "Web Bluetooth is unavailable. Open this page in Bluefy on your iPhone."
+      );
+      return;
+    }
+
+    setStatus("SEARCHING...", "#fbbf24");
+
+    device = await navigator.bluetooth.requestDevice({
+      filters: [
+        { name: "Shock_Logger" }
+      ],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    device.addEventListener(
+      "gattserverdisconnected",
+      onDisconnected
+    );
+
+    setStatus("CONNECTING...", "#fbbf24");
+
+    const server = await device.gatt.connect();
+
+    const service =
+      await server.getPrimaryService(SERVICE_UUID);
+
+    characteristic =
+      await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+    await characteristic.startNotifications();
+
+    characteristic.addEventListener(
+      "characteristicvaluechanged",
+      handleData
+    );
+
+    setStatus("CONNECTED", "#4adeb4");
+
+    document.getElementById("connectBtn").textContent =
+      "CONNECTED TO " + device.name;
+
+  } catch (error) {
+
+    console.error(error);
+
+    setStatus("CONNECTION ERROR", "#fb7185");
+
+    alert("Bluetooth error: " + error.message);
+  }
+}
+
+function handleData(event) {
+
+  const value = event.target.value;
+
+  const text = new TextDecoder().decode(value);
+
+  const readings = text.trim().split(",").map(Number);
+
+  if (readings.length < 6 ||
+      !readings.slice(0, 6).every(Number.isFinite)) {
+    return;
+  }
+
+  const [x, y, z, total, shock, devicePeak] = readings;
+
+  document.getElementById("x").textContent =
+    x.toFixed(2) + " G";
+
+  document.getElementById("y").textContent =
+    y.toFixed(2) + " G";
+
+  document.getElementById("z").textContent =
+    z.toFixed(2) + " G";
+
+  document.getElementById("total").textContent =
+    total.toFixed(2) + " G";
+
+  highestShock = Math.max(
+    highestShock,
+    shock,
+    devicePeak
+  );
+
+  highestTotal = Math.max(highestTotal, total);
+
+  document.getElementById("peak").textContent =
+    highestShock.toFixed(2);
+
+  addPoint(xData, x);
+  addPoint(yData, y);
+  addPoint(zData, z);
+  addPoint(shockData, shock);
+
+  drawCharts();
+}
+
+function onDisconnected() {
+
+  setStatus("DISCONNECTED", "#fb7185");
+
+  document.getElementById("connectBtn").textContent =
+    "CONNECT ESP32-C3";
+
+  characteristic = null;
+}
+
+function disconnectBLE() {
+
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+
+  onDisconnected();
+}
+
+function resetPeak() {
+
+  highestShock = 0;
+
+  document.getElementById("peak").textContent =
+    "0.00";
+}
+
+// Draw live charts
+function drawChart(canvasId, datasets, colors, maxAbs) {
+
+  const canvas = document.getElementById(canvasId);
+
+  const rect = canvas.getBoundingClientRect();
+
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+
+  const ctx = canvas.getContext("2d");
+
+  ctx.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  // Grid
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 1;
+
+  for (let i = 1; i <= 4; i++) {
+    let y = height * i / 5;
+
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  datasets.forEach((data, index) => {
+
+    if (data.length < 2) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = colors[index];
+    ctx.lineWidth = 2;
+
+    data.forEach((value, i) => {
+
+      const x = i * width / (historyLength - 1);
+
+      const y = height / 2 -
+        (value / maxAbs) * (height / 2 - 8);
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+
+    ctx.stroke();
+
+  });
+}
+
+function drawCharts() {
+
+  drawChart(
+    "accelChart",
+    [xData, yData, zData],
+    ["#4adeb4", "#60a5fa", "#fbbf24"],
+    16
+  );
+
+  const shockMax = Math.max(
+    5,
+    ...shockData.map(v => Math.abs(v))
+  );
+
+  drawChart(
+    "shockChart",
+    [shockData],
+    ["#fb7185"],
+    shockMax
+  );
+}
+
+window.addEventListener("resize", drawCharts);
+
+drawCharts();
+
+</script>
+</body>
+</html>
+
