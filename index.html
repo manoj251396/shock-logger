@@ -8,125 +8,170 @@
 <title>Shock Logger</title>
 
 <style>
-* {
-  box-sizing: border-box;
-}
+* { box-sizing:border-box; }
 
 body {
-  margin: 0;
-  padding: 18px;
-  background: #101827;
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin:0;
+  padding:18px;
+  background:#101827;
+  color:#f1f5f9;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 }
 
 .container {
-  max-width: 600px;
-  margin: auto;
+  max-width:600px;
+  margin:auto;
 }
 
 .header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:20px;
 }
 
-h1 {
-  font-size: 23px;
-  margin: 0;
-}
+h1 { font-size:23px; margin:0; }
 
-.muted {
-  color: #94a3b8;
-  font-size: 12px;
-}
+.muted { color:#94a3b8; font-size:12px; }
 
 .status {
-  color: #fbbf24;
-  font-size: 12px;
-  font-weight: bold;
+  color:#fbbf24;
+  font-size:12px;
+  font-weight:bold;
+}
+
+.tabs {
+  display:flex;
+  gap:6px;
+  background:#1c293b;
+  padding:5px;
+  border-radius:12px;
+  margin-bottom:16px;
+}
+
+.tab {
+  flex:1;
+  border:0;
+  background:transparent;
+  color:#94a3b8;
+  padding:13px 5px;
+  border-radius:9px;
+  font-size:13px;
+  font-weight:bold;
+  margin:0;
+}
+
+.tab.active {
+  background:#4adeb4;
+  color:#102b27;
 }
 
 .card {
-  background: #1c293b;
-  border: 1px solid #2c3c52;
-  border-radius: 16px;
-  padding: 17px;
-  margin-bottom: 14px;
+  background:#1c293b;
+  border:1px solid #2c3c52;
+  border-radius:16px;
+  padding:17px;
+  margin-bottom:14px;
 }
 
 .label {
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: bold;
-  letter-spacing: 1px;
+  color:#94a3b8;
+  font-size:11px;
+  font-weight:bold;
+  letter-spacing:1px;
 }
 
 .big {
-  font-size: 43px;
-  font-weight: 750;
-  color: #4adeb4;
-  margin-top: 8px;
+  font-size:43px;
+  font-weight:750;
+  color:#4adeb4;
+  margin-top:8px;
 }
 
-.unit {
-  font-size: 19px;
-}
+.unit { font-size:19px; }
 
 .grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
 }
 
 .value {
-  font-size: 25px;
-  font-weight: bold;
-  margin-top: 9px;
+  font-size:25px;
+  font-weight:bold;
+  margin-top:9px;
 }
 
 button {
-  border: 0;
-  border-radius: 12px;
-  padding: 15px;
-  width: 100%;
-  font-size: 15px;
-  font-weight: bold;
-  background: #4adeb4;
-  color: #102b27;
-  margin: 6px 0;
-  cursor: pointer;
+  border:0;
+  border-radius:12px;
+  padding:15px;
+  width:100%;
+  font-size:15px;
+  font-weight:bold;
+  background:#4adeb4;
+  color:#102b27;
+  margin:6px 0;
+  cursor:pointer;
 }
 
 button.secondary {
-  background: #334155;
-  color: white;
+  background:#334155;
+  color:white;
 }
 
 button.danger {
-  background: #7f293b;
-  color: white;
+  background:#7f293b;
+  color:white;
 }
 
 canvas {
-  width: 100%;
-  height: 190px;
-  display: block;
-  margin-top: 12px;
+  width:100%;
+  height:190px;
+  display:block;
+  margin-top:12px;
 }
 
+.axisBar {
+  height:13px;
+  width:100%;
+  background:#334155;
+  border-radius:20px;
+  overflow:hidden;
+  margin-top:8px;
+}
+
+.axisFill {
+  height:100%;
+  border-radius:20px;
+  transition:width .15s;
+}
+
+.axisValue {
+  font-size:23px;
+  font-weight:bold;
+}
+
+.winner {
+  font-size:34px;
+  font-weight:800;
+  color:#4adeb4;
+  margin-top:10px;
+}
+
+.panel { display:none; }
+.panel.active { display:block; }
+
 .footer {
-  text-align: center;
-  color: #64748b;
-  font-size: 11px;
-  padding: 16px;
+  text-align:center;
+  color:#64748b;
+  font-size:11px;
+  padding:16px;
 }
 </style>
 </head>
 
 <body>
-
 <div class="container">
 
   <div class="header">
@@ -134,90 +179,154 @@ canvas {
       <h1>⚡ SHOCK LOGGER</h1>
       <div class="muted">ESP32-C3 · MPU6050</div>
     </div>
-
-    <div class="status" id="status">
-      ● DISCONNECTED
-    </div>
+    <div class="status" id="status">● DISCONNECTED</div>
   </div>
 
-  <!-- Highest shock -->
+  <!-- Navigation tabs -->
 
-  <div class="card">
-    <div class="label">HIGHEST SHOCK RECORDED</div>
+  <div class="tabs">
+    <button class="tab active" id="liveTab"
+      onclick="showTab('live')">
+      LIVE DATA
+    </button>
 
-    <div class="big">
-      <span id="peak">0.00</span>
-      <span class="unit">G</span>
-    </div>
-
-    <div class="muted">
-      Maximum dynamic acceleration since reset
-    </div>
+    <button class="tab" id="axisTab"
+      onclick="showTab('axis')">
+      AXIS ANALYSIS
+    </button>
   </div>
 
-  <!-- Live values -->
+  <!-- LIVE DATA TAB -->
 
-  <div class="grid">
+  <div class="panel active" id="livePanel">
 
     <div class="card">
-      <div class="label">X ACCELERATION</div>
-      <div class="value" id="x">0.00 G</div>
+      <div class="label">HIGHEST SHOCK RECORDED</div>
+
+      <div class="big">
+        <span id="peak">0.00</span>
+        <span class="unit">G</span>
+      </div>
+
+      <div class="muted">
+        Maximum dynamic acceleration
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <div class="card">
+        <div class="label">X ACCELERATION</div>
+        <div class="value" id="x">0.00 G</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Y ACCELERATION</div>
+        <div class="value" id="y">0.00 G</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Z ACCELERATION</div>
+        <div class="value" id="z">0.00 G</div>
+      </div>
+
+      <div class="card">
+        <div class="label">TOTAL ACCELERATION</div>
+        <div class="value" id="total">0.00 G</div>
+      </div>
+
     </div>
 
     <div class="card">
-      <div class="label">Y ACCELERATION</div>
-      <div class="value" id="y">0.00 G</div>
+      <div class="label">LIVE X / Y / Z ACCELERATION</div>
+      <canvas id="accelChart"></canvas>
+
+      <div class="muted">
+        <span style="color:#4adeb4">● X</span>
+        &nbsp;
+        <span style="color:#60a5fa">● Y</span>
+        &nbsp;
+        <span style="color:#fbbf24">● Z</span>
+      </div>
     </div>
 
     <div class="card">
-      <div class="label">Z ACCELERATION</div>
-      <div class="value" id="z">0.00 G</div>
-    </div>
-
-    <div class="card">
-      <div class="label">TOTAL ACCELERATION</div>
-      <div class="value" id="total">0.00 G</div>
+      <div class="label">LIVE SHOCK GRAPH</div>
+      <canvas id="shockChart"></canvas>
+      <div class="muted">Dynamic acceleration (G)</div>
     </div>
 
   </div>
 
-  <!-- XYZ graph -->
+  <!-- AXIS ANALYSIS TAB -->
 
-  <div class="card">
+  <div class="panel" id="axisPanel">
 
-    <div class="label">
-      LIVE X / Y / Z ACCELERATION
+    <div class="card">
+      <div class="label">STRONGEST IMPACT AXIS</div>
+      <div class="winner" id="winner">WAITING...</div>
+      <div class="muted" id="winnerValue">
+        Waiting for sensor readings
+      </div>
     </div>
 
-    <canvas id="accelChart"></canvas>
+    <div class="card">
+      <div class="label">MAXIMUM X AXIS ACCELERATION</div>
+      <div class="axisValue" id="peakX">0.00 G</div>
+      <div class="axisBar">
+        <div class="axisFill"
+          id="barX"
+          style="width:0%;background:#4adeb4">
+        </div>
+      </div>
+    </div>
 
-    <div class="muted">
-      <span style="color:#4adeb4">● X</span>
-      &nbsp;
-      <span style="color:#60a5fa">● Y</span>
-      &nbsp;
-      <span style="color:#fbbf24">● Z</span>
+    <div class="card">
+      <div class="label">MAXIMUM Y AXIS ACCELERATION</div>
+      <div class="axisValue" id="peakY">0.00 G</div>
+      <div class="axisBar">
+        <div class="axisFill"
+          id="barY"
+          style="width:0%;background:#60a5fa">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">MAXIMUM Z AXIS ACCELERATION</div>
+      <div class="axisValue" id="peakZ">0.00 G</div>
+      <div class="axisBar">
+        <div class="axisFill"
+          id="barZ"
+          style="width:0%;background:#fbbf24">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">AXIS COMPARISON</div>
+      <canvas id="axisChart"></canvas>
+      <div class="muted">
+        Maximum absolute acceleration per axis (G)
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">HOW TO READ THIS</div>
+      <p class="muted">
+        The axis with the largest recorded absolute
+        acceleration is identified as the strongest
+        axis during the current monitoring session.
+      </p>
+      <p class="muted">
+        Values are measured relative to the sensor's
+        fixed X, Y and Z directions.
+      </p>
     </div>
 
   </div>
 
-  <!-- Shock graph -->
-
-  <div class="card">
-
-    <div class="label">
-      LIVE SHOCK GRAPH
-    </div>
-
-    <canvas id="shockChart"></canvas>
-
-    <div class="muted">
-      Dynamic acceleration (G)
-    </div>
-
-  </div>
-
-  <!-- Bluetooth buttons -->
+  <!-- Bluetooth controls -->
 
   <button id="connectBtn" onclick="connectBLE()">
     CONNECT ESP32-C3
@@ -227,19 +336,19 @@ canvas {
     DISCONNECT
   </button>
 
-  <button class="danger" onclick="resetPeak()">
-    RESET HIGHEST SHOCK
+  <button class="danger" onclick="resetAll()">
+    RESET ALL MEASUREMENTS
   </button>
 
   <div class="footer">
-    SHOCK LOGGER · BLE MONITORING
+    SHOCK LOGGER · BLUETOOTH MONITORING
   </div>
 
 </div>
 
 <script>
 
-// BLE UUIDs - MUST MATCH ESP32 CODE
+// BLE IDENTIFIERS
 
 const SERVICE_UUID =
 "12345678-1234-1234-1234-123456789000";
@@ -250,10 +359,14 @@ const CHARACTERISTIC_UUID =
 let device = null;
 let characteristic = null;
 
-// Highest shock is calculated on the iPhone
+// Measurement data
+
 let highestShock = 0;
 
-// Graph history
+let maxX = 0;
+let maxY = 0;
+let maxZ = 0;
+
 const historyLength = 100;
 
 let xData = [];
@@ -262,7 +375,28 @@ let zData = [];
 let shockData = [];
 
 
-// STATUS DISPLAY
+// TAB NAVIGATION
+
+function showTab(tab) {
+
+  document.getElementById("livePanel")
+    .classList.toggle("active", tab === "live");
+
+  document.getElementById("axisPanel")
+    .classList.toggle("active", tab === "axis");
+
+  document.getElementById("liveTab")
+    .classList.toggle("active", tab === "live");
+
+  document.getElementById("axisTab")
+    .classList.toggle("active", tab === "axis");
+
+  drawCharts();
+
+}
+
+
+// STATUS
 
 function setStatus(message, color) {
 
@@ -275,7 +409,7 @@ function setStatus(message, color) {
 }
 
 
-// BLUETOOTH CONNECTION
+// BLUETOOTH
 
 async function connectBLE() {
 
@@ -283,9 +417,7 @@ async function connectBLE() {
 
     if (!navigator.bluetooth) {
 
-      alert(
-        "Bluetooth unavailable. Open this website in Bluefy."
-      );
+      alert("Please open this website in Bluefy.");
 
       return;
     }
@@ -294,9 +426,7 @@ async function connectBLE() {
 
     device = await navigator.bluetooth.requestDevice({
 
-      filters: [
-        { name: "Shock_Logger" }
-      ],
+      filters: [{ name: "Shock_Logger" }],
 
       optionalServices: [SERVICE_UUID]
 
@@ -307,18 +437,13 @@ async function connectBLE() {
       onDisconnected
     );
 
-    setStatus("CONNECTING...", "#fbbf24");
-
-    const server =
-      await device.gatt.connect();
+    const server = await device.gatt.connect();
 
     const service =
       await server.getPrimaryService(SERVICE_UUID);
 
     characteristic =
-      await service.getCharacteristic(
-        CHARACTERISTIC_UUID
-      );
+      await service.getCharacteristic(CHARACTERISTIC_UUID);
 
     await characteristic.startNotifications();
 
@@ -334,29 +459,26 @@ async function connectBLE() {
 
   }
 
-  catch (error) {
+  catch(error) {
 
     console.error(error);
 
     setStatus("CONNECTION ERROR", "#fb7185");
 
-    alert(
-      "Bluetooth error: " + error.message
-    );
+    alert("Bluetooth error: " + error.message);
 
   }
 
 }
 
 
-// RECEIVE ESP32 DATA
+// RECEIVE SENSOR DATA
 
 function handleData(event) {
 
-  const value = event.target.value;
-
-  const text =
-    new TextDecoder().decode(value);
+  const text = new TextDecoder().decode(
+    event.target.value
+  );
 
   const readings =
     text.trim().split(",").map(Number);
@@ -369,15 +491,10 @@ function handleData(event) {
   }
 
   const [
-    x,
-    y,
-    z,
-    total,
-    shock,
-    devicePeak
+    x, y, z, total, shock, devicePeak
   ] = readings;
 
-  // Update live readings
+  // Live values
 
   document.getElementById("x").textContent =
     x.toFixed(2) + " G";
@@ -392,21 +509,24 @@ function handleData(event) {
     total.toFixed(2) + " G";
 
 
-  // IMPORTANT:
-  // Use only incoming shock values.
-  // Do not use devicePeak here.
-  // This allows the phone's reset button to work.
+  // Highest dynamic shock on phone
 
-  highestShock = Math.max(
-    highestShock,
-    shock
-  );
+  highestShock = Math.max(highestShock, shock);
 
   document.getElementById("peak").textContent =
     highestShock.toFixed(2);
 
 
-  // Update graph data
+  // Axis peaks use absolute values
+
+  maxX = Math.max(maxX, Math.abs(x));
+  maxY = Math.max(maxY, Math.abs(y));
+  maxZ = Math.max(maxZ, Math.abs(z));
+
+  updateAxisAnalysis();
+
+
+  // Graph history
 
   addPoint(xData, x);
   addPoint(yData, y);
@@ -414,6 +534,63 @@ function handleData(event) {
   addPoint(shockData, shock);
 
   drawCharts();
+
+}
+
+
+// AXIS ANALYSIS
+
+function updateAxisAnalysis() {
+
+  document.getElementById("peakX").textContent =
+    maxX.toFixed(2) + " G";
+
+  document.getElementById("peakY").textContent =
+    maxY.toFixed(2) + " G";
+
+  document.getElementById("peakZ").textContent =
+    maxZ.toFixed(2) + " G";
+
+  const largest = Math.max(maxX, maxY, maxZ);
+
+  const scale = Math.max(largest, 0.01);
+
+  document.getElementById("barX").style.width =
+    (maxX / scale * 100) + "%";
+
+  document.getElementById("barY").style.width =
+    (maxY / scale * 100) + "%";
+
+  document.getElementById("barZ").style.width =
+    (maxZ / scale * 100) + "%";
+
+
+  let winner = "NONE";
+  let winnerValue = 0;
+
+  if (maxX >= maxY && maxX >= maxZ) {
+    winner = "X AXIS";
+    winnerValue = maxX;
+  }
+
+  if (maxY > maxX && maxY >= maxZ) {
+    winner = "Y AXIS";
+    winnerValue = maxY;
+  }
+
+  if (maxZ > maxX && maxZ > maxY) {
+    winner = "Z AXIS";
+    winnerValue = maxZ;
+  }
+
+  document.getElementById("winner").textContent =
+    largest < 0.01 ? "WAITING..." : winner;
+
+  document.getElementById("winnerValue").textContent =
+    largest < 0.01
+      ? "Waiting for sensor readings"
+      : "Maximum absolute acceleration: " +
+        winnerValue.toFixed(2) + " G";
 
 }
 
@@ -456,14 +633,31 @@ function disconnectBLE() {
 }
 
 
-// RESET HIGHEST SHOCK
+// RESET EVERYTHING
 
-function resetPeak() {
+function resetAll() {
 
   highestShock = 0;
 
-  document.getElementById("peak").textContent =
-    "0.00";
+  maxX = 0;
+  maxY = 0;
+  maxZ = 0;
+
+  xData = [];
+  yData = [];
+  zData = [];
+  shockData = [];
+
+  document.getElementById("peak").textContent = "0.00";
+
+  updateAxisAnalysis();
+
+  document.getElementById("x").textContent = "0.00 G";
+  document.getElementById("y").textContent = "0.00 G";
+  document.getElementById("z").textContent = "0.00 G";
+  document.getElementById("total").textContent = "0.00 G";
+
+  drawCharts();
 
 }
 
@@ -477,22 +671,18 @@ function drawChart(
   maxAbs
 ) {
 
-  const canvas =
-    document.getElementById(canvasId);
+  const canvas = document.getElementById(canvasId);
 
-  const rect =
-    canvas.getBoundingClientRect();
+  const rect = canvas.getBoundingClientRect();
 
   if (!rect.width) return;
 
-  const dpr =
-    window.devicePixelRatio || 1;
+  const dpr = window.devicePixelRatio || 1;
 
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
 
-  const ctx =
-    canvas.getContext("2d");
+  const ctx = canvas.getContext("2d");
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -500,8 +690,6 @@ function drawChart(
   const height = rect.height;
 
   ctx.clearRect(0, 0, width, height);
-
-  // Grid lines
 
   ctx.strokeStyle = "#334155";
   ctx.lineWidth = 1;
@@ -516,9 +704,6 @@ function drawChart(
     ctx.stroke();
 
   }
-
-
-  // Draw datasets
 
   datasets.forEach((data, index) => {
 
@@ -553,7 +738,7 @@ function drawChart(
 }
 
 
-// UPDATE GRAPHS
+// ALL GRAPHS
 
 function drawCharts() {
 
@@ -576,20 +761,20 @@ function drawCharts() {
     shockMax
   );
 
+  drawChart(
+    "axisChart",
+    [[maxX, maxY, maxZ]],
+    ["#4adeb4"],
+    Math.max(5, maxX, maxY, maxZ)
+  );
+
 }
 
 
-// HANDLE SCREEN RESIZE
-
-window.addEventListener(
-  "resize",
-  drawCharts
-);
-
-
-// INITIALIZE
+window.addEventListener("resize", drawCharts);
 
 drawCharts();
+updateAxisAnalysis();
 
 </script>
 
