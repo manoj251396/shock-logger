@@ -300,7 +300,7 @@ canvas {
       </div>
 
       <div class="muted">
-        Maximum dynamic acceleration
+        Peak dynamic acceleration during carton impact (G)
       </div>
     </div>
 
@@ -324,6 +324,11 @@ canvas {
       <div class="card">
         <div class="label">TOTAL ACCELERATION</div>
         <div class="value" id="total">0.00 G</div>
+      </div>
+
+      <div class="card">
+        <div class="label">DROP / IMPACT EVENTS</div>
+        <div class="value" id="dropCount">0</div>
       </div>
 
     </div>
@@ -365,7 +370,7 @@ canvas {
     <div class="card">
       <div class="label">LIVE SHOCK GRAPH</div>
       <canvas id="shockChart"></canvas>
-      <div class="muted">Dynamic acceleration (G)</div>
+      <div class="muted">Peak dynamic acceleration per BLE update (G)</div>
     </div>
 
   </div>
@@ -464,6 +469,10 @@ canvas {
     </div>
   </div>
 
+  <div class="muted" style="text-align:center;margin:10px 0">
+    Drop detection threshold is configured in ESP32 firmware. Sensor range: ±16 G.
+  </div>
+
   <div class="footer">
     SHOCK LOGGER · BLUETOOTH MONITORING
   </div>
@@ -504,7 +513,7 @@ let archivedSessions = [];
 let sessionNumber = 1;
 let resetAwaitingExport = false;
 
-function recordMovement(x, y, z, total, shock, devicePeak) {
+function recordMovement(x, y, z, total, shock, devicePeak, eventCount) {
   movementLog.push({
     "Session": sessionNumber,
     "Timestamp": new Date().toLocaleString(),
@@ -517,6 +526,7 @@ function recordMovement(x, y, z, total, shock, devicePeak) {
     "Total acceleration (G)": Number(total.toFixed(4)),
     "Shock (G)": Number(shock.toFixed(4)),
     "Device peak (G)": Number(devicePeak.toFixed(4)),
+    "Drop events (device cumulative)": Number(eventCount),
     _time: Date.now()
   });
 }
@@ -552,7 +562,8 @@ async function exportMovementWorkbook() {
     "Maximum X (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["X acceleration (G)"]) || 0))).toFixed(4),
     "Maximum Y (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Y acceleration (G)"]) || 0))).toFixed(4),
     "Maximum Z (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Z acceleration (G)"]) || 0))).toFixed(4),
-    "Maximum shock (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Shock (G)"]) || 0))).toFixed(4)
+    "Maximum shock (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Shock (G)"]) || 0))).toFixed(4),
+    "Drop events (device cumulative)": Math.max(...session.rows.map(r => Number(r["Drop events (device cumulative)"]) || 0))
   }));
 
   const filename = "Shock_Logger_Movement_Data.xlsx";
@@ -566,11 +577,11 @@ async function exportMovementWorkbook() {
 
       detailSheet["!cols"] = [
         { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 },
-        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }, { wch: 18 }
+        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 28 }
       ];
       summarySheet["!cols"] = [
         { wch: 10 }, { wch: 24 }, { wch: 24 }, { wch: 20 },
-        { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }
+        { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 28 }
       ];
 
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Session Summary");
@@ -704,6 +715,7 @@ function resetAllMeasurementsOnly() {
   document.getElementById("y").textContent = "0.00 G";
   document.getElementById("z").textContent = "0.00 G";
   document.getElementById("total").textContent = "0.00 G";
+  document.getElementById("dropCount").textContent = "0";
   drawCharts();
 }
 
@@ -715,9 +727,9 @@ let cartonFrameStarted = false;
 function updateCartonTarget(x, y, z) {
   // Clamp extreme readings so a large impact cannot throw the carton off-screen.
   const clamp = (value, limit) => Math.max(-limit, Math.min(limit, value));
-  cartonTarget.x = clamp(x, 2.5) / 2.5;
-  cartonTarget.y = clamp(y, 2.5) / 2.5;
-  cartonTarget.z = clamp(z, 2.5) / 2.5;
+  cartonTarget.x = clamp(x, 16) / 16;
+  cartonTarget.y = clamp(y, 16) / 16;
+  cartonTarget.z = clamp(z, 16) / 16;
 
   document.getElementById("boxX").textContent = x.toFixed(2);
   document.getElementById("boxY").textContent = y.toFixed(2);
@@ -877,19 +889,20 @@ function handleData(event) {
     text.trim().split(",").map(Number);
 
   if (
-    readings.length < 6 ||
-    !readings.slice(0, 6).every(Number.isFinite)
+    readings.length < 7 ||
+    !readings.slice(0, 7).every(Number.isFinite)
   ) {
     return;
   }
 
   const [
-    x, y, z, total, shock, devicePeak
+    x, y, z, total, shock, devicePeak, eventCount
   ] = readings;
 
   // Move the 3D carton in response to the sensor's X, Y and Z readings.
   updateCartonTarget(x, y, z);
-  recordMovement(x, y, z, total, shock, devicePeak);
+  recordMovement(x, y, z, total, shock, devicePeak, eventCount);
+  document.getElementById("dropCount").textContent = String(Math.round(eventCount));
 
   // Live values
 
