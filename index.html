@@ -817,63 +817,63 @@ function setStatus(message, color) {
 // BLUETOOTH
 
 async function connectBLE() {
-
   try {
-
+    // Web Bluetooth requires a supported browser and a secure HTTPS page.
+    if (!window.isSecureContext) {
+      throw new Error("This page is not secure. Open the dashboard using its HTTPS address.");
+    }
     if (!navigator.bluetooth) {
+      throw new Error("Web Bluetooth is unavailable in this browser. Open this HTTPS page in Bluefy and check its Bluetooth permission.");
+    }
 
-      alert("Please open this website in Bluefy.");
-
+    if (device && device.gatt && device.gatt.connected) {
+      setStatus("ALREADY CONNECTED", "#4adeb4");
       return;
     }
 
-    setStatus("SEARCHING...", "#fbbf24");
+    setStatus("SEARCHING FOR ESP32-C3...", "#fbbf24");
 
+    // Each filter is an alternative. The service UUID is the primary match;
+    // the advertised name is a second match for browsers that expose it.
+    // optionalServices authorizes access to the custom service after selection.
     device = await navigator.bluetooth.requestDevice({
-
-      filters: [{ name: "Shock_Logger" }],
-
+      filters: [
+        { services: [SERVICE_UUID] },
+        { namePrefix: "ShockLogger-ESP32C3" }
+      ],
       optionalServices: [SERVICE_UUID]
-
     });
 
-    device.addEventListener(
-      "gattserverdisconnected",
-      onDisconnected
-    );
+    setStatus("DEVICE SELECTED. CONNECTING...", "#fbbf24");
+    device.addEventListener("gattserverdisconnected", onDisconnected);
 
     const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
-    const service =
-      await server.getPrimaryService(SERVICE_UUID);
-
-    characteristic =
-      await service.getCharacteristic(CHARACTERISTIC_UUID);
-
+    // Register the listener before enabling notifications so the first
+    // incoming packet is not missed.
+    characteristic.addEventListener("characteristicvaluechanged", handleData);
     await characteristic.startNotifications();
 
-    characteristic.addEventListener(
-      "characteristicvaluechanged",
-      handleData
-    );
-
     setStatus("CONNECTED", "#4adeb4");
-
     document.getElementById("connectBtn").textContent =
-      "CONNECTED TO " + device.name;
+      "CONNECTED TO " + (device.name || "ESP32-C3");
+  } catch (error) {
+    console.error("BLE connection failed:", error);
+    characteristic = null;
+    setStatus("CONNECTION FAILED", "#fb7185");
 
+    let explanation = error && error.message ? error.message : String(error);
+    if (error && error.name === "NotFoundError") {
+      explanation = "No matching BLE device was returned by Bluefy. Confirm the ESP32 is advertising, close nRF Connect, reload this HTTPS page, and try again.";
+    } else if (error && error.name === "SecurityError") {
+      explanation = "Bluefy blocked Bluetooth access. Check iPhone Bluetooth permission and make sure this page is HTTPS.";
+    } else if (error && error.name === "NotAllowedError") {
+      explanation = "Bluetooth selection was cancelled or permission was denied. Try CONNECT again and allow the device request.";
+    }
+    alert("Bluetooth connection problem: " + explanation);
   }
-
-  catch(error) {
-
-    console.error(error);
-
-    setStatus("CONNECTION ERROR", "#fb7185");
-
-    alert("Bluetooth error: " + error.message);
-
-  }
-
 }
 
 
