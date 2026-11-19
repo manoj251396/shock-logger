@@ -452,7 +452,16 @@ canvas {
     SAVE SESSION / EXPORT EXCEL
   </button>
   <div class="muted" style="text-align:center;margin:2px 0 10px">
-    First press saves the current session and resets live values. Second press downloads the Excel report.
+    First press saves the session and resets live values. Second press opens the iPhone Share sheet: choose Save to Files.
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="label">IPHONE EXPORT HELP</div>
+    <div class="muted" style="line-height:1.6;margin-top:7px">
+      After the second press, choose <b>Save to Files</b> in the iPhone Share sheet.
+      Save the .xlsx file in On My iPhone or iCloud Drive. If Excel export is unavailable,
+      the page creates an Excel-compatible .csv file instead.
+    </div>
   </div>
 
   <div class="footer">
@@ -528,14 +537,10 @@ function archiveCurrentSession() {
   return true;
 }
 
-function exportMovementWorkbook() {
-  if (typeof XLSX === "undefined") {
-    alert("Excel export library could not load. Please connect to the internet and try again.");
-    return;
-  }
+async function exportMovementWorkbook() {
   if (!archivedSessions.length) {
-    alert("No recorded movement data is available yet. Move the sensor, then press RESET ALL MEASUREMENTS to save the session.");
-    return;
+    alert("No recorded movement data is available yet. Move the sensor and save a session first.");
+    return false;
   }
 
   const allRows = archivedSessions.flatMap(session => session.rows);
@@ -544,30 +549,117 @@ function exportMovementWorkbook() {
     "Start time": session.started,
     "End time": session.ended,
     "Number of readings": session.rows.length,
-    "Maximum X (G)": Math.max(...session.rows.map(r => Math.abs(r["X acceleration (G)"]))).toFixed(4),
-    "Maximum Y (G)": Math.max(...session.rows.map(r => Math.abs(r["Y acceleration (G)"]))).toFixed(4),
-    "Maximum Z (G)": Math.max(...session.rows.map(r => Math.abs(r["Z acceleration (G)"]))).toFixed(4),
-    "Maximum shock (G)": Math.max(...session.rows.map(r => Math.abs(r["Shock (G)"]))).toFixed(4)
+    "Maximum X (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["X acceleration (G)"]) || 0))).toFixed(4),
+    "Maximum Y (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Y acceleration (G)"]) || 0))).toFixed(4),
+    "Maximum Z (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Z acceleration (G)"]) || 0))).toFixed(4),
+    "Maximum shock (G)": Math.max(...session.rows.map(r => Math.abs(Number(r["Shock (G)"]) || 0))).toFixed(4)
   }));
 
-  const workbook = XLSX.utils.book_new();
-  const detailSheet = XLSX.utils.json_to_sheet(allRows);
-  const summarySheet = XLSX.utils.json_to_sheet(summary);
-  detailSheet["!cols"] = [
-    { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 },
-    { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }, { wch: 18 }
+  const filename = "Shock_Logger_Movement_Data.xlsx";
+
+  // Preferred route: create a real Excel workbook, then use the iOS share sheet.
+  if (typeof XLSX !== "undefined") {
+    try {
+      const workbook = XLSX.utils.book_new();
+      const detailSheet = XLSX.utils.json_to_sheet(allRows);
+      const summarySheet = XLSX.utils.json_to_sheet(summary);
+
+      detailSheet["!cols"] = [
+        { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 },
+        { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }, { wch: 18 }
+      ];
+      summarySheet["!cols"] = [
+        { wch: 10 }, { wch: 24 }, { wch: 24 }, { wch: 20 },
+        { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Session Summary");
+      XLSX.utils.book_append_sheet(workbook, detailSheet, "Movement & Shock Log");
+
+      const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      const file = new File(
+        [bytes],
+        filename,
+        { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+      );
+
+      // iPhone/iPad: open the native Share sheet so the user can choose Save to Files.
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Shock Logger Excel Report",
+          text: "Movement and shock measurements from the Shock Logger."
+        });
+        return true;
+      }
+
+      // Fallback for browsers that support blob downloads but not file sharing.
+      const xlsxBlob = new Blob([bytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      });
+      const xlsxUrl = URL.createObjectURL(xlsxBlob);
+      const link = document.createElement("a");
+      link.href = xlsxUrl;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      // Keep the object URL alive briefly for iOS browsers that begin downloads asynchronously.
+      setTimeout(() => URL.revokeObjectURL(xlsxUrl), 60000);
+      alert("Your Excel report has been prepared. If Bluefy does not show a download, use the browser Share button and choose Save to Files.");
+      return true;
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      // Continue to CSV fallback below.
+    }
+  }
+
+  // Fallback: CSV opens directly in Excel/Numbers if the XLSX library is blocked.
+  const csvEscape = value => {
+    const text = String(value == null ? "" : value);
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  const csvLines = [
+    ["SHOCK LOGGER - SESSION SUMMARY"],
+    Object.keys(summary[0] || {}),
+    ...summary.map(row => Object.values(row)),
+    [],
+    ["MOVEMENT AND SHOCK LOG"],
+    Object.keys(allRows[0] || {}),
+    ...allRows.map(row => Object.values(row))
   ];
-  summarySheet["!cols"] = [
-    { wch: 10 }, { wch: 24 }, { wch: 24 }, { wch: 20 },
-    { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }
-  ];
-  XLSX.utils.book_append_sheet(workbook, summarySheet, "Session Summary");
-  XLSX.utils.book_append_sheet(workbook, detailSheet, "Movement & Shock Log");
-  XLSX.writeFile(workbook, "Shock_Logger_Movement_Data.xlsx");
-  resetAwaitingExport = false;
+  const csv = "\uFEFF" + csvLines.map(row => row.map(csvEscape).join(",")).join("\r\n");
+  const csvBlob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const csvFile = new File([csvBlob], "Shock_Logger_Movement_Data.csv", {
+    type: "text/csv;charset=utf-8"
+  });
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [csvFile] })) {
+    await navigator.share({
+      files: [csvFile],
+      title: "Shock Logger CSV Report",
+      text: "Excel-compatible movement and shock report. Open it with Excel or Numbers."
+    });
+    alert("The Excel library was unavailable, so a CSV report was shared. Choose Save to Files; it can be opened in Excel or Numbers.");
+    return true;
+  }
+
+  const csvUrl = URL.createObjectURL(csvBlob);
+  const csvLink = document.createElement("a");
+  csvLink.href = csvUrl;
+  csvLink.download = "Shock_Logger_Movement_Data.csv";
+  csvLink.style.display = "none";
+  document.body.appendChild(csvLink);
+  csvLink.click();
+  csvLink.remove();
+  setTimeout(() => URL.revokeObjectURL(csvUrl), 60000);
+  alert("An Excel-compatible CSV report has been prepared. In Bluefy, open the browser Share menu and choose Save to Files. You can open the CSV in Excel or Numbers.");
+  return true;
 }
 
-function handleResetButton() {
+async function handleResetButton() {
   if (!resetAwaitingExport) {
     const archived = archiveCurrentSession();
     if (!archived) {
@@ -576,16 +668,24 @@ function handleResetButton() {
     }
     resetAllMeasurementsOnly();
     resetAwaitingExport = true;
-    alert("Measurement session saved. The live measurements have been reset. Press RESET again to download the Excel report.");
+    alert("Measurement session saved and live values reset. Press this button again to create your Excel report. On iPhone, choose Save to Files in the Share menu.");
     return;
   }
 
-  // Second press: include any readings collected since the first reset.
+  // Include readings collected since the first reset, if any.
   archiveCurrentSession();
   resetAllMeasurementsOnly();
-  exportMovementWorkbook();
-  archivedSessions = [];
-  resetAwaitingExport = false;
+
+  try {
+    const exported = await exportMovementWorkbook();
+    if (exported) {
+      archivedSessions = [];
+      resetAwaitingExport = false;
+    }
+  } catch (error) {
+    console.error("Report sharing was cancelled or failed:", error);
+    alert("The report was not shared. Your saved readings are still held in this page. Press the button again and try once more.");
+  }
 }
 
 function resetAllMeasurementsOnly() {
@@ -933,7 +1033,10 @@ function disconnectBLE() {
 // RESET EVERYTHING
 
 function resetAll() {
-  handleResetButton();
+  handleResetButton().catch(error => {
+    console.error(error);
+    alert('Could not create the report. Please try again.');
+  });
 }
 
 
