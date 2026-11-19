@@ -167,7 +167,99 @@ canvas {
   font-size:11px;
   padding:16px;
 }
+
+/* 3D carton animation */
+.box-stage {
+  height:220px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  perspective:700px;
+  overflow:hidden;
+  margin:8px 0 4px;
+  border-radius:12px;
+  background:radial-gradient(ellipse at center, #293b50 0%, #1c293b 68%);
+}
+.carton {
+  --w:112px;
+  --h:82px;
+  --d:76px;
+  width:var(--w);
+  height:var(--h);
+  position:relative;
+  transform-style:preserve-3d;
+  transform:translate3d(0,0,0);
+  will-change:transform;
+  z-index:2;
+}
+.carton-face {
+  position:absolute;
+  border:2px solid #9a642e;
+  background:#bd8749;
+  box-shadow:inset 0 0 18px rgba(80,42,12,.16);
+  backface-visibility:hidden;
+}
+.carton-front, .carton-back {
+  width:var(--w);
+  height:var(--h);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:5px;
+  color:#4b2d16;
+  font-weight:900;
+  letter-spacing:2px;
+  font-size:13px;
+}
+.carton-front { transform:translateZ(calc(var(--d) / 2)); }
+.carton-front small { font-size:7px; letter-spacing:1px; }
+.carton-back { transform:rotateY(180deg) translateZ(calc(var(--d) / 2)); }
+.carton-right, .carton-left {
+  width:var(--d);
+  height:var(--h);
+  left:calc((var(--w) - var(--d)) / 2);
+  background:#a96f38;
+}
+.carton-right { transform:rotateY(90deg) translateZ(calc(var(--w) / 2)); }
+.carton-left { transform:rotateY(-90deg) translateZ(calc(var(--w) / 2)); }
+.carton-top, .carton-bottom {
+  width:var(--w);
+  height:var(--d);
+  top:calc((var(--h) - var(--d)) / 2);
+  background:#d5a365;
+}
+.carton-top { transform:rotateX(90deg) translateZ(calc(var(--h) / 2)); }
+.carton-bottom { transform:rotateX(-90deg) translateZ(calc(var(--h) / 2)); }
+.carton-top:after {
+  content:"";
+  position:absolute;
+  left:48%;
+  top:0;
+  width:4%;
+  height:100%;
+  background:#8e5b2c;
+  opacity:.8;
+}
+.box-shadow {
+  position:absolute;
+  width:135px;
+  height:28px;
+  border-radius:50%;
+  background:rgba(0,0,0,.35);
+  filter:blur(9px);
+  transform:translateY(69px);
+}
+.box-readout {
+  display:flex;
+  justify-content:space-around;
+  font-size:13px;
+  margin:4px 0 10px;
+}
+.box-readout b { color:#f1f5f9; font-weight:700; margin-left:4px; }
 </style>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 
 <body>
@@ -234,6 +326,27 @@ canvas {
         <div class="value" id="total">0.00 G</div>
       </div>
 
+    </div>
+
+    <div class="card">
+      <div class="label">LIVE CARTON MOVEMENT · 3D SENSOR VIEW</div>
+      <div class="box-stage" aria-label="3D carton animation responding to X, Y and Z sensor readings">
+        <div class="carton" id="carton">
+          <div class="carton-face carton-front"><span>FRAGILE</span><small>HANDLE WITH CARE</small></div>
+          <div class="carton-face carton-back"></div>
+          <div class="carton-face carton-right"></div>
+          <div class="carton-face carton-left"></div>
+          <div class="carton-face carton-top"></div>
+          <div class="carton-face carton-bottom"></div>
+        </div>
+        <div class="box-shadow" id="boxShadow"></div>
+      </div>
+      <div class="box-readout">
+        <span style="color:#4adeb4">X <b id="boxX">0.00</b></span>
+        <span style="color:#60a5fa">Y <b id="boxY">0.00</b></span>
+        <span style="color:#fbbf24">Z <b id="boxZ">0.00</b></span>
+      </div>
+      <div class="muted">The carton shifts and tilts in 3D as the MPU6050 readings change.</div>
     </div>
 
     <div class="card">
@@ -336,8 +449,11 @@ canvas {
   </button>
 
   <button class="danger" onclick="resetAll()">
-    RESET ALL MEASUREMENTS
+    SAVE SESSION / EXPORT EXCEL
   </button>
+  <div class="muted" style="text-align:center;margin:2px 0 10px">
+    First press saves the current session and resets live values. Second press downloads the Excel report.
+  </div>
 
   <div class="footer">
     SHOCK LOGGER · BLUETOOTH MONITORING
@@ -372,6 +488,184 @@ let xData = [];
 let yData = [];
 let zData = [];
 let shockData = [];
+
+// Every valid sensor packet is retained until the user exports the session.
+let movementLog = [];
+let archivedSessions = [];
+let sessionNumber = 1;
+let resetAwaitingExport = false;
+
+function recordMovement(x, y, z, total, shock, devicePeak) {
+  movementLog.push({
+    "Session": sessionNumber,
+    "Timestamp": new Date().toLocaleString(),
+    "Elapsed time (s)": movementLog.length
+      ? ((Date.now() - movementLog[0]._time) / 1000).toFixed(3)
+      : "0.000",
+    "X acceleration (G)": Number(x.toFixed(4)),
+    "Y acceleration (G)": Number(y.toFixed(4)),
+    "Z acceleration (G)": Number(z.toFixed(4)),
+    "Total acceleration (G)": Number(total.toFixed(4)),
+    "Shock (G)": Number(shock.toFixed(4)),
+    "Device peak (G)": Number(devicePeak.toFixed(4)),
+    _time: Date.now()
+  });
+}
+
+function archiveCurrentSession() {
+  if (!movementLog.length) return false;
+
+  // Keep export-friendly fields only; internal timing value is not needed.
+  const rows = movementLog.map(({ _time, ...row }) => row);
+  archivedSessions.push({
+    session: sessionNumber,
+    started: rows[0]["Timestamp"],
+    ended: rows[rows.length - 1]["Timestamp"],
+    rows
+  });
+  movementLog = [];
+  sessionNumber += 1;
+  return true;
+}
+
+function exportMovementWorkbook() {
+  if (typeof XLSX === "undefined") {
+    alert("Excel export library could not load. Please connect to the internet and try again.");
+    return;
+  }
+  if (!archivedSessions.length) {
+    alert("No recorded movement data is available yet. Move the sensor, then press RESET ALL MEASUREMENTS to save the session.");
+    return;
+  }
+
+  const allRows = archivedSessions.flatMap(session => session.rows);
+  const summary = archivedSessions.map(session => ({
+    "Session": session.session,
+    "Start time": session.started,
+    "End time": session.ended,
+    "Number of readings": session.rows.length,
+    "Maximum X (G)": Math.max(...session.rows.map(r => Math.abs(r["X acceleration (G)"]))).toFixed(4),
+    "Maximum Y (G)": Math.max(...session.rows.map(r => Math.abs(r["Y acceleration (G)"]))).toFixed(4),
+    "Maximum Z (G)": Math.max(...session.rows.map(r => Math.abs(r["Z acceleration (G)"]))).toFixed(4),
+    "Maximum shock (G)": Math.max(...session.rows.map(r => Math.abs(r["Shock (G)"]))).toFixed(4)
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  const detailSheet = XLSX.utils.json_to_sheet(allRows);
+  const summarySheet = XLSX.utils.json_to_sheet(summary);
+  detailSheet["!cols"] = [
+    { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 },
+    { wch: 20 }, { wch: 20 }, { wch: 24 }, { wch: 16 }, { wch: 18 }
+  ];
+  summarySheet["!cols"] = [
+    { wch: 10 }, { wch: 24 }, { wch: 24 }, { wch: 20 },
+    { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }
+  ];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, "Session Summary");
+  XLSX.utils.book_append_sheet(workbook, detailSheet, "Movement & Shock Log");
+  XLSX.writeFile(workbook, "Shock_Logger_Movement_Data.xlsx");
+  resetAwaitingExport = false;
+}
+
+function handleResetButton() {
+  if (!resetAwaitingExport) {
+    const archived = archiveCurrentSession();
+    if (!archived) {
+      alert("No sensor readings to save yet. Connect the ESP32-C3 and move the sensor first.");
+      return;
+    }
+    resetAllMeasurementsOnly();
+    resetAwaitingExport = true;
+    alert("Measurement session saved. The live measurements have been reset. Press RESET again to download the Excel report.");
+    return;
+  }
+
+  // Second press: include any readings collected since the first reset.
+  archiveCurrentSession();
+  resetAllMeasurementsOnly();
+  exportMovementWorkbook();
+  archivedSessions = [];
+  resetAwaitingExport = false;
+}
+
+function resetAllMeasurementsOnly() {
+  highestShock = 0;
+  maxX = 0;
+  maxY = 0;
+  maxZ = 0;
+  xData = [];
+  yData = [];
+  zData = [];
+  shockData = [];
+  updateCartonTarget(0, 0, 0);
+  document.getElementById("peak").textContent = "0.00";
+  updateAxisAnalysis();
+  document.getElementById("x").textContent = "0.00 G";
+  document.getElementById("y").textContent = "0.00 G";
+  document.getElementById("z").textContent = "0.00 G";
+  document.getElementById("total").textContent = "0.00 G";
+  drawCharts();
+}
+
+// Smoothed 3D carton motion targets, driven by live accelerometer readings.
+let cartonTarget = { x: 0, y: 0, z: 0 };
+let cartonMotion = { x: 0, y: 0, z: 0 };
+let cartonFrameStarted = false;
+
+function updateCartonTarget(x, y, z) {
+  // Clamp extreme readings so a large impact cannot throw the carton off-screen.
+  const clamp = (value, limit) => Math.max(-limit, Math.min(limit, value));
+  cartonTarget.x = clamp(x, 2.5) / 2.5;
+  cartonTarget.y = clamp(y, 2.5) / 2.5;
+  cartonTarget.z = clamp(z, 2.5) / 2.5;
+
+  document.getElementById("boxX").textContent = x.toFixed(2);
+  document.getElementById("boxY").textContent = y.toFixed(2);
+  document.getElementById("boxZ").textContent = z.toFixed(2);
+
+  if (!cartonFrameStarted) {
+    cartonFrameStarted = true;
+    requestAnimationFrame(animateCarton);
+  }
+}
+
+function animateCarton() {
+  // Ease toward the latest readings to keep the motion smooth.
+  cartonMotion.x += (cartonTarget.x - cartonMotion.x) * 0.16;
+  cartonMotion.y += (cartonTarget.y - cartonMotion.y) * 0.16;
+  cartonMotion.z += (cartonTarget.z - cartonMotion.z) * 0.16;
+
+  const carton = document.getElementById("carton");
+  const shadow = document.getElementById("boxShadow");
+  if (carton) {
+    const moveX = cartonMotion.x * 48;
+    const moveY = cartonMotion.y * -38;
+    const moveZ = cartonMotion.z * 24;
+    const rotateX = cartonMotion.y * 24;
+    const rotateY = cartonMotion.x * 28;
+    const rotateZ = cartonMotion.z * 16;
+    const scale = 1 + cartonMotion.z * 0.10;
+    carton.style.transform =
+      `translate3d(${moveX}px, ${moveY}px, ${moveZ}px) ` +
+      `rotateX(${rotateX}deg) rotateY(${rotateY}deg) ` +
+      `rotateZ(${rotateZ}deg) scale(${scale})`;
+  }
+  if (shadow) {
+    shadow.style.transform =
+      `translate(${cartonMotion.x * 18}px, ${69 + cartonMotion.y * 8}px) scale(${1 - cartonMotion.z * 0.08})`;
+  }
+
+  if (
+    Math.abs(cartonTarget.x - cartonMotion.x) > 0.001 ||
+    Math.abs(cartonTarget.y - cartonMotion.y) > 0.001 ||
+    Math.abs(cartonTarget.z - cartonMotion.z) > 0.001
+  ) {
+    requestAnimationFrame(animateCarton);
+  } else {
+    cartonFrameStarted = false;
+  }
+}
+
 
 
 // TAB NAVIGATION
@@ -492,6 +786,10 @@ function handleData(event) {
   const [
     x, y, z, total, shock, devicePeak
   ] = readings;
+
+  // Move the 3D carton in response to the sensor's X, Y and Z readings.
+  updateCartonTarget(x, y, z);
+  recordMovement(x, y, z, total, shock, devicePeak);
 
   // Live values
 
@@ -635,29 +933,7 @@ function disconnectBLE() {
 // RESET EVERYTHING
 
 function resetAll() {
-
-  highestShock = 0;
-
-  maxX = 0;
-  maxY = 0;
-  maxZ = 0;
-
-  xData = [];
-  yData = [];
-  zData = [];
-  shockData = [];
-
-  document.getElementById("peak").textContent = "0.00";
-
-  updateAxisAnalysis();
-
-  document.getElementById("x").textContent = "0.00 G";
-  document.getElementById("y").textContent = "0.00 G";
-  document.getElementById("z").textContent = "0.00 G";
-  document.getElementById("total").textContent = "0.00 G";
-
-  drawCharts();
-
+  handleResetButton();
 }
 
 
